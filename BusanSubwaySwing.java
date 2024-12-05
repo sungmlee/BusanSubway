@@ -369,10 +369,15 @@ public class BusanSubwaySwing extends JFrame {
     }
     
     private void drawHighlightedPath(Graphics g) {
+        Graphics2D g2 = (Graphics2D) g; // Graphics 객체를 Graphics2D로 
         g.setColor(Color.RED);
+        g2.setStroke(new BasicStroke(4)); // 선의 두께를 4로 설정 (숫자를 조정하면 두께 변경)
+
         for (Line line : highlightedPath) {
             g.drawLine(line.x1, line.y1, line.x2, line.y2);
         }
+        g2.setStroke(new BasicStroke(1)); //  원래 두께로
+
     }
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
