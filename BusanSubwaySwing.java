@@ -1,5 +1,6 @@
 import javax.swing.*;
 import java.awt.*;
+import java.awt.Color;
 import java.util.*;
 
 public class BusanSubwaySwing extends JFrame {
@@ -92,22 +93,70 @@ public class BusanSubwaySwing extends JFrame {
 
     // 경로와 소요 시간을 계산하여 화면에 출력
     private int calculatePathDetails(String start, String end) {
-    java.util.List<String> path = dijkstra(start, end);
-    StringBuilder pathInfo = new StringBuilder("경로:\n");
-    int totalTime = 0;
-
-    for (int i = 0; i < path.size() - 1; i++) {
-        String from = path.get(i);
-        String to = path.get(i + 1);
-        int time = graph.get(from).get(to);
-
-        pathInfo.append(String.format("%s -> %s (%d분)\n", from, to, time));
-        totalTime += time;
+        java.util.List<String> path = dijkstra(start, end);
+        StringBuilder pathInfo = new StringBuilder("경로:\n");
+        int totalTime = 0;
+        String currentLine = findLineName(path.get(0), path.get(1)); // 첫 번째 노선 찾기
+        
+        pathInfo.append(String.format("%s (시작: %s)\n", path.get(0), currentLine));
+        
+        for (int i = 0; i < path.size() - 1; i++) {
+            String from = path.get(i);
+            String to = path.get(i + 1);
+            int time = graph.get(from).get(to);
+            String lineName = findLineName(from, to);
+            
+            // 노선 변경 감지
+            if (!lineName.equals(currentLine)) {
+                pathInfo.append(String.format("\n[환승] %s에서 %s에서 %s으로 환승 (5분 소요)\n", 
+                    from, currentLine, lineName));
+                totalTime += 5; // 환승 시간 추가
+                currentLine = lineName;
+                
+                pathInfo.append(String.format("%s (현재 노선: %s)\n", from, currentLine));
+            }
+            
+            pathInfo.append(String.format(" → %s (%s, %d분)\n", to, lineName, time));
+            totalTime += time;
+        }
+        
+        pathDetailsArea.setText(pathInfo.toString());
+        return totalTime;
+    }
+    
+    private String findLineName(String from, String to) {
+        // 노선 목록을 미리 정의
+        String[][] lines = {
+            {"1호선", "다대포해수욕장", "다대포항", "낫개", "신장림", "장림", "동매", "신평", "하단", "당리",
+            "사하", "괴정", "대티", "서대신", "동대신", "토성", "자갈치", "남포", "중앙", "부산역",
+            "초량", "부산진", "좌천", "범일", "범내골", "서면", "부전", "양정", "시청", "연산",
+            "교대", "동래", "명륜", "온천장", "부산대", "장전", "구서", "두실", "남산", "범어사", "노포"},
+            {"2호선", "장산", "중동", "해운대", "동백", "벡스코", "센텀시티", "민락", "수영", "광안",
+            "금련산", "남천", "경성대부경대", "대연", "못골", "지게골", "문현", "국제금융센터부산은행",
+            "전포", "서면", "부암", "가야", "동의대", "개금", "냉정", "주례", "감전", "사상",
+            "덕포", "모덕", "모라", "구남", "구명", "덕천", "수정", "화명", "율리", "동원", "금곡", "호포", "증산", "부산대양산캠퍼스", "남양산", "양산"},
+            {"3호선", "수영", "망미", "배산", "물만골", "연산","거제", "종합운동장", "사직", "미남", "만덕", "남산정",
+            "숙등", "덕천", "구포", "강서구청", "체육공원", "대저"},
+            {"4호선", "미남", "동래", "수안", "낙민", "충렬사", "명장", "서동", "금사", "반여농산물시장", "석대",
+            "영산대", "반여", "재송", "센텀"}
+        };
+    
+        // 두 역이 같은 노선에 있는지 확인
+        for (String[] line : lines) {
+            int fromIndex = -1, toIndex = -1;
+            for (int i = 1; i < line.length; i++) {
+                if (line[i].equals(from)) fromIndex = i;
+                if (line[i].equals(to)) toIndex = i;
+            }
+    
+            if (fromIndex != -1 && toIndex != -1 && Math.abs(fromIndex - toIndex) < line.length) {
+                return line[0]; // 노선 이름 반환
+            }
+        }
+    
+        return "Unknown";
     }
 
-    pathDetailsArea.setText(pathInfo.toString()); // JTextArea에 경로 정보 표시
-    return totalTime; // 총 소요 시간 반환
-    }
     private void initializeSubwayData() {
         double scale = 1; // 축소 비율
     
@@ -231,14 +280,16 @@ public class BusanSubwaySwing extends JFrame {
     }
 
     private void addLine(String[] stationNames, int[] xCoordinates, int[] yCoordinates, int[] times, String lineName) {
-        validateCoordinates(stationNames, xCoordinates, yCoordinates);
+        validateCoordinates(stationNames, xCoordinates, yCoordinates, times);
         
         if (times.length != stationNames.length - 1) {
             throw new IllegalArgumentException(
                 String.format("Times array length mismatch: stationNames(%d), times(%d)", 
                     stationNames.length, times.length));
         }
-    
+        
+        Color color = getColorByLineName(lineName); // 노선 색상 가져오기
+        
         for (int i = 0; i < stationNames.length; i++) {
             addStation(stationNames[i], xCoordinates[i], yCoordinates[i]);
             if (i > 0) {
@@ -255,7 +306,23 @@ public class BusanSubwaySwing extends JFrame {
     private void addConnection(String from, String to, int time, String lineName) {
         graph.get(from).put(to, time);
         graph.get(to).put(from, time);
-        connections.add(new Line(stations.get(from).x, stations.get(from).y, stations.get(to).x, stations.get(to).y, lineName));
+        Color color = getColorByLineName(lineName); // 노선 색상 가져오기
+        connections.add(new Line(stations.get(from).x, stations.get(from).y, stations.get(to).x, stations.get(to).y, lineName, color));
+    }
+
+    private Color getColorByLineName(String lineName) {
+        switch (lineName) {
+            case "1호선":
+                return new Color(240, 106, 0);
+            case "2호선":
+                return new Color(129, 191, 72);
+            case "3호선":
+                return new Color(187, 140, 0);
+            case "4호선":
+                return new Color(46, 103, 206);
+            default:
+                return Color.GRAY;
+        }
     }
 
     private void highlightShortestPath(String start, String end) {
@@ -271,7 +338,7 @@ public class BusanSubwaySwing extends JFrame {
     private void validateCoordinates(String[] stationNames, int[] xCoordinates, int[] yCoordinates, int[] times) {
         if (stationNames.length != xCoordinates.length || stationNames.length != yCoordinates.length || stationNames.length - 1 != times.length) {
             throw new IllegalArgumentException(
-                String.format("Coordinate data mismatch: stationNames(%d), xCoordinates(%d), yCoordinates(%d), times(%d)",
+                String.format("데이터 개수 다름: stationNames(%d), xCoordinates(%d), yCoordinates(%d), times(%d)",
                               stationNames.length, xCoordinates.length, yCoordinates.length, times.length));
         }
     }
@@ -279,6 +346,8 @@ public class BusanSubwaySwing extends JFrame {
     private java.util.List<String> dijkstra(String start, String end) {
         Map<String, Integer> distances = new HashMap<>();
         Map<String, String> previous = new HashMap<>();
+        Map<String, String> previousLine = new HashMap<>(); // 이전 호선 추적
+        
         PriorityQueue<String> pq = new PriorityQueue<>(Comparator.comparingInt(distances::get));
 
         final int TRANSFER_TIME = 5; // 환승 소요 시간 (분)
@@ -286,6 +355,7 @@ public class BusanSubwaySwing extends JFrame {
 
         for (String station : stations.keySet()) {
             distances.put(station, Integer.MAX_VALUE);
+            previousLine.put(station, null);
         }
         distances.put(start, 0);
         pq.add(start);
@@ -297,16 +367,23 @@ public class BusanSubwaySwing extends JFrame {
 
             for (Map.Entry<String, Integer> neighbor : graph.get(current).entrySet()) {
                 int baseTime = neighbor.getValue();
+                String neighborStation = neighbor.getKey();
+                String currentLine = findLineName(current, neighborStation);
+                String previousLineName = previousLine.get(current);
+                
                 int newDist = distances.get(current) + baseTime;
-    
-                // 환승역 처리
-                if (transferStations.contains(current) && !current.equals(start)) {
-                    newDist += TRANSFER_TIME; // 환승 시간 추가
+                
+                // 환승 로직 개선
+                if (previousLineName != null && 
+                    !currentLine.equals(previousLineName) && 
+                    isTransferStation(current)) {
+                    newDist += TRANSFER_TIME;
                 }
-    
+                
                 if (newDist < distances.get(neighbor.getKey())) {
                     distances.put(neighbor.getKey(), newDist);
                     previous.put(neighbor.getKey(), current);
+                    previousLine.put(neighbor.getKey(), currentLine);
                     pq.add(neighbor.getKey());
                 }
             }
@@ -319,66 +396,61 @@ public class BusanSubwaySwing extends JFrame {
         return path;
     }
 
-    private String findLineName(String from, String to) {
-        for (Line connection : connections) {
-            if ((connection.x1 == stations.get(from).x && connection.y1 == stations.get(from).y &&
-                    connection.x2 == stations.get(to).x && connection.y2 == stations.get(to).y) ||
-                    (connection.x2 == stations.get(from).x && connection.y2 == stations.get(from).y &&
-                            connection.x1 == stations.get(to).x && connection.y1 == stations.get(to).y)) {
-                return connection.lineName;
-            }
-        }
-        return "Unknown";
-    }
-
-    private void validateCoordinates(String[] stationNames, int[] xCoordinates, int[] yCoordinates) {
-        if (stationNames.length != xCoordinates.length || stationNames.length != yCoordinates.length) {
-            throw new IllegalArgumentException(
-                    String.format("Coordinate data mismatch: stationNames(%d), xCoordinates(%d), yCoordinates(%d)",
-                            stationNames.length, xCoordinates.length, yCoordinates.length));
-        }
+    // 환승역 확인 메서드
+    private boolean isTransferStation(String station) {
+        return Arrays.asList("서면", "덕천", "미남", "동래").contains(station);
     }
 
     private static class Line {
         int x1, y1, x2, y2;
         String lineName;
-
+        Color color; // 추가: 색상 필드
+    
         Line(int x1, int y1, int x2, int y2, String lineName) {
             this.x1 = x1;
             this.y1 = y1;
             this.x2 = x2;
             this.y2 = y2;
             this.lineName = lineName;
+            this.color = null; // 기본 색상 설정
+        }
+    
+        Line(int x1, int y1, int x2, int y2, String lineName, Color color) {
+            this(x1, y1, x2, y2, lineName); // 기본 생성자 호출
+            this.color = color;
         }
     }
 
     private void drawConnections(Graphics g) {
+        Graphics2D g2 = (Graphics2D) g;
+        g2.setStroke(new BasicStroke(2));
         for (Line connection : connections) {
-            g.setColor(Color.GRAY);
+            g.setColor(connection.color); // 노선 색상 사용
             g.drawLine(connection.x1, connection.y1, connection.x2, connection.y2);
         }
     }
     
     private void drawStations(Graphics g) {
         for (Station station : stations.values()) {
-            g.setColor(Color.BLUE);
+            g.setColor(Color.WHITE);
             g.fillOval(station.x - 5, station.y - 5, 10, 10);
             g.setColor(Color.BLACK);
+            g.drawOval(station.x - 5, station.y - 5, 10, 10);
             g.drawString(station.name, station.x + 10, station.y);
         }
     }
     
     private void drawHighlightedPath(Graphics g) {
-        Graphics2D g2 = (Graphics2D) g; // Graphics 객체를 Graphics2D로 
-        g.setColor(Color.RED);
-        g2.setStroke(new BasicStroke(4)); // 선의 두께를 4로 설정 (숫자를 조정하면 두께 변경)
-
+        Graphics2D g2 = (Graphics2D) g;
+        g2.setStroke(new BasicStroke(4));
+    
         for (Line line : highlightedPath) {
+            g.setColor(Color.RED);
             g.drawLine(line.x1, line.y1, line.x2, line.y2);
         }
-        g2.setStroke(new BasicStroke(1)); //  원래 두께로
-
+        g2.setStroke(new BasicStroke(2)); // 원래 두께로
     }
+    
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             BusanSubwaySwing frame = new BusanSubwaySwing();
